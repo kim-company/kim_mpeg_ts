@@ -185,6 +185,7 @@ defmodule MPEG.TS.PMT do
     end
   end
 
+  @spec encode_stream_type(atom()) :: stream_id_t()
   def encode_stream_type(val), do: Map.fetch!(@atom_to_stream_id, val)
 
   @doc """
@@ -194,10 +195,10 @@ defmodule MPEG.TS.PMT do
 
       iex> get_stream_category(:H264)
       :video
-      
+
       iex> get_stream_category(:AAC)
       :audio
-      
+
       iex> get_stream_category(:DVB_SUBTITLE)
       :other
   """
@@ -252,10 +253,10 @@ defmodule MPEG.TS.PMT do
 
       iex> get_stream_category_by_id(0x1B)
       :video
-      
+
       iex> get_stream_category_by_id(0x0F)
       :audio
-      
+
       iex> get_stream_category_by_id(0x42)
       :other
   """
@@ -272,7 +273,7 @@ defmodule MPEG.TS.PMT do
 
       iex> is_video_stream?(:H264)
       true
-      
+
       iex> is_video_stream?(:AAC)
       false
   """
@@ -287,11 +288,22 @@ defmodule MPEG.TS.PMT do
 
       iex> is_audio_stream?(:AAC)
       true
-      
+
       iex> is_audio_stream?(:H264)
       false
   """
   def is_audio_stream?(stream_type) do
     get_stream_category(stream_type) == :audio
+  end
+
+  defimpl MPEG.TS.Marshaler do
+    def marshal(pmt) do
+      streams =
+        Enum.map_join(pmt.streams, fn {pid, stream} ->
+          <<stream.stream_type_id::8, 0b111::3, pid::13, 0b1111::4, 0::12>>
+        end)
+
+      <<0b111::3, pmt.pcr_pid::13, 0b1111::4, 0::12>> <> streams
+    end
   end
 end

@@ -2,6 +2,7 @@ defmodule MPEG.TS.PMTTest do
   use ExUnit.Case
   doctest MPEG.TS.PMT, import: true
 
+  alias MPEG.TS.Marshaler
   alias MPEG.TS.PMT
   alias MPEG.TS.Packet
   alias Support.Factory
@@ -33,6 +34,21 @@ defmodule MPEG.TS.PMTTest do
     test "unmarshals valid packet" do
       {:ok, packet} = Packet.parse(Factory.pmt_packet())
       assert {:ok, %PMT{}} = PMT.unmarshal(packet.payload, packet.pusi)
+    end
+  end
+
+  describe "PMT marshaler" do
+    test "marshal a PMT" do
+      pmt = %PMT{
+        pcr_pid: 0x0100,
+        program_info: [],
+        streams: %{
+          256 => %{stream_type: :H264, stream_type_id: 0x1B},
+          257 => %{stream_type: :MPEG1_AUDIO, stream_type_id: 0x03}
+        }
+      }
+
+      assert Marshaler.marshal(pmt) == Factory.pmt()
     end
   end
 end
