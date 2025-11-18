@@ -1,6 +1,6 @@
 # MPEG.TS
-[![Hex.pm Version](https://img.shields.io/hexpm/v/mpeg_ts)](https://img.shields.io/hexpm/v/mpeg_ts?link=https%3A%2F%2Fhex.pm%2Fpackages%2Fmpeg_ts
-)
+![Hex.pm Version](https://img.shields.io/hexpm/v/mpeg_ts?link=https%3A%2F%2Fhex.pm%2Fpackages%2Fmpeg_ts)
+
 
 MPEG Transport Stream (TS) library.
 
