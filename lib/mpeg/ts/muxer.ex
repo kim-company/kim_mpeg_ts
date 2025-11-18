@@ -187,7 +187,7 @@ defmodule MPEG.TS.Muxer do
     pes_data = Marshaler.marshal(pes)
     header_size = 8
     # PCR should be in nanoseconds, same as PTS/DTS
-    pcr = if send_pcr?, do: (pes.dts || pes.pts)
+    pcr = if send_pcr?, do: pes.dts || pes.pts
 
     {0, @ts_payload_size - header_size}
     |> chunk(byte_size(pes_data))

@@ -73,10 +73,10 @@ defmodule MPEG.TS.MuxerTest do
 
   test "mux SCTE35", %{muxer: muxer} do
     {pid, muxer} =
-      Muxer.add_elementary_stream(muxer, :SCTE_35_SPLICE, [
+      Muxer.add_elementary_stream(muxer, :SCTE_35_SPLICE,
         program_info: [%{tag: 5, data: "CUEI"}],
         pid: 500
-      ])
+      )
 
     table = Support.Factory.scte35()
 

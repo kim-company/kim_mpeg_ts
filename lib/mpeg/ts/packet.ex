@@ -135,7 +135,12 @@ defmodule MPEG.TS.Packet do
 
   @spec parse_payload(binary(), adaptation_control_t(), pid_class_t()) ::
           {:ok, map(), bitstring()} | {:error, parse_error_t()}
-  defp parse_payload(<<adaptation_field_length::8, adaptation_field::binary-size(adaptation_field_length), _rest::binary>>, :adaptation, _) do
+  defp parse_payload(
+         <<adaptation_field_length::8, adaptation_field::binary-size(adaptation_field_length),
+           _rest::binary>>,
+         :adaptation,
+         _
+       ) do
     with {:ok, adaptation} <- parse_adaptation_field(adaptation_field) do
       {:ok, adaptation, <<>>}
     end
