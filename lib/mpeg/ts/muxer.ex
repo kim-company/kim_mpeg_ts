@@ -43,7 +43,7 @@ defmodule MPEG.TS.Muxer do
   Add a new elementary stream.
   """
   @spec add_elementary_stream(t(), atom(), Keyword.t()) :: {Packet.pid_t(), t()}
-  def add_elementary_stream(%__MODULE__{pmt: pmt} = muxer, stream_type, opts \\ []) do
+  def add_elementary_stream(%__MODULE__{pmt: %PMT{} = pmt} = muxer, stream_type, opts \\ []) do
     opts =
       Keyword.validate!(opts,
         pcr?: false,
