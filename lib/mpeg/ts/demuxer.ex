@@ -242,9 +242,7 @@ defmodule MPEG.TS.Demuxer do
     |> then(fn state ->
       # Each stream that contains a PES stream should have its aggregator.
       state.streams
-      |> Enum.filter(fn {_pid, stream} ->
-        PMT.get_stream_category(stream.stream_type) in [:audio, :video, :metadata]
-      end)
+      |> Enum.filter(fn {_pid, stream} -> PMT.pes_stream_type?(stream.stream_type) end)
       |> Enum.reduce(state, fn {pid, _stream}, state ->
         update_in(state, [Access.key!(:stream_aggregators), pid], fn
           nil -> StreamAggregator.new(wait_rai?: state.wait_rai?)

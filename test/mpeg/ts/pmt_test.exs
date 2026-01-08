@@ -43,4 +43,23 @@ defmodule MPEG.TS.PMTTest do
       assert Marshaler.marshal(pmt) == Factory.pmt()
     end
   end
+
+  describe "PES stream type identification" do
+    test "marks PES-bearing types as PES" do
+      assert PMT.pes_stream_type?(:H264_AVC)
+      assert PMT.pes_stream_type?(:PES_PRIVATE_DATA)
+      assert PMT.pes_stream_type?(:SCTE_35_SPLICE)
+      assert PMT.pes_stream_type?(:PGS_SUBTITLE)
+      assert PMT.pes_stream_type?({:USER_PRIVATE, 0xBC})
+    end
+
+    test "marks section-based types as non-PES" do
+      refute PMT.pes_stream_type?(:PRIVATE_SECTIONS)
+      refute PMT.pes_stream_type?(:MHEG)
+      refute PMT.pes_stream_type?(:DSM_CC)
+      refute PMT.pes_stream_type?(:ISO_13818_6_TYPE_A)
+      refute PMT.pes_stream_type?(:ISO_14496_1_SL_IN_SECTIONS)
+      refute PMT.pes_stream_type?(:METADATA_IN_SECTIONS)
+    end
+  end
 end

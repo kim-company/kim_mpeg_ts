@@ -239,6 +239,35 @@ defmodule MPEG.TS.PMT do
   @spec encode_stream_type(atom()) :: stream_id_t()
   def encode_stream_type(val), do: Map.fetch!(@atom_to_stream_id, val)
 
+  @non_pes_stream_types [
+    :RESERVED,
+    :undefined,
+    :PRIVATE_SECTIONS,
+    :MHEG,
+    :DSM_CC,
+    :ISO_13818_6_TYPE_A,
+    :ISO_13818_6_TYPE_B,
+    :ISO_13818_6_TYPE_C,
+    :ISO_13818_6_TYPE_D,
+    :ISO_13818_6_DOWNLOAD,
+    :ISO_14496_1_SL_IN_SECTIONS,
+    :METADATA_IN_SECTIONS,
+    :METADATA_IN_DATA_CAROUSEL,
+    :METADATA_IN_OBJECT_CAROUSEL,
+    :METADATA_IN_SYNC_DOWNLOAD,
+    :IPMP
+  ]
+
+  @doc """
+  Returns true for stream types that carry PES packets.
+  """
+  @spec pes_stream_type?(atom() | {atom(), stream_type_id_t()}) :: boolean()
+  def pes_stream_type?({:USER_PRIVATE, _stream_type_id}), do: true
+
+  def pes_stream_type?(stream_type) when stream_type in @non_pes_stream_types, do: false
+
+  def pes_stream_type?(_stream_type), do: true
+
   @doc """
   Categorizes a stream type as :video, :audio, or :other.
 
