@@ -4,7 +4,7 @@ defmodule MPEG.TS.MixProject do
   def project do
     [
       app: :mpeg_ts,
-      version: "3.3.7",
+      version: "3.3.8",
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
