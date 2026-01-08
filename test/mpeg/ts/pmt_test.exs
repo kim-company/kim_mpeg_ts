@@ -15,8 +15,8 @@ defmodule MPEG.TS.PMTTest do
                pcr_pid: 0x0100,
                program_info: [],
                streams: %{
-                 256 => %{stream_type: :H264_AVC, stream_type_id: 0x1B},
-                 257 => %{stream_type: :MPEG1_AUDIO, stream_type_id: 0x03}
+                 256 => %{stream_type: :H264_AVC, stream_type_id: 0x1B, descriptors: []},
+                 257 => %{stream_type: :MPEG1_AUDIO, stream_type_id: 0x03, descriptors: []}
                }
              } = table
     end
@@ -35,8 +35,8 @@ defmodule MPEG.TS.PMTTest do
         pcr_pid: 0x0100,
         program_info: [],
         streams: %{
-          256 => %{stream_type: :H264_AVC, stream_type_id: 0x1B},
-          257 => %{stream_type: :MPEG1_AUDIO, stream_type_id: 0x03}
+          256 => %{stream_type: :H264_AVC, stream_type_id: 0x1B, descriptors: []},
+          257 => %{stream_type: :MPEG1_AUDIO, stream_type_id: 0x03, descriptors: []}
         }
       }
 
@@ -48,7 +48,6 @@ defmodule MPEG.TS.PMTTest do
     test "marks PES-bearing types as PES" do
       assert PMT.pes_stream_type?(:H264_AVC)
       assert PMT.pes_stream_type?(:PES_PRIVATE_DATA)
-      assert PMT.pes_stream_type?(:SCTE_35_SPLICE)
       assert PMT.pes_stream_type?(:PGS_SUBTITLE)
       assert PMT.pes_stream_type?({:USER_PRIVATE, 0xBC})
     end
@@ -60,6 +59,18 @@ defmodule MPEG.TS.PMTTest do
       refute PMT.pes_stream_type?(:ISO_13818_6_TYPE_A)
       refute PMT.pes_stream_type?(:ISO_14496_1_SL_IN_SECTIONS)
       refute PMT.pes_stream_type?(:METADATA_IN_SECTIONS)
+      refute PMT.pes_stream_type?(:SCTE_35_SPLICE)
+    end
+  end
+
+  describe "descriptor parsing" do
+    test "parses ES descriptors and keeps PES classification" do
+      pmt =
+        <<0xE1, 0x00, 0xF0, 0x00, 0x06, 0xE1, 0x01, 0xF0, 0x03, 0x59, 0x01, 0xAA>>
+
+      assert {:ok, %PMT{streams: %{257 => stream}}} = PMT.unmarshal(pmt, true)
+      assert stream.descriptors == [%{tag: 0x59, data: <<0xAA>>}]
+      assert PMT.pes_stream?(stream)
     end
   end
 end

@@ -37,8 +37,8 @@ defmodule MPEG.TS.DemuxerTest do
              pcr_pid: 256,
              program_info: [],
              streams: %{
-               256 => %{stream_type: :H264_AVC, stream_type_id: 27},
-               257 => %{stream_type: :AAC_ADTS, stream_type_id: 15}
+               256 => %{stream_type: :H264_AVC, stream_type_id: 27, descriptors: []},
+               257 => %{stream_type: :AAC_ADTS, stream_type_id: 15, descriptors: []}
              }
            } == container.payload.table
   end

@@ -47,6 +47,7 @@ defmodule MPEG.TS.Muxer do
     opts =
       Keyword.validate!(opts,
         pcr?: false,
+        descriptors: [],
         program_info: [],
         pid: @start_pid + map_size(pmt.streams)
       )
@@ -74,7 +75,11 @@ defmodule MPEG.TS.Muxer do
       end
 
     new_streams =
-      Map.put(pmt.streams, pid, %{stream_type_id: stream_type_id, stream_type: stream_type})
+      Map.put(pmt.streams, pid, %{
+        stream_type_id: stream_type_id,
+        stream_type: stream_type,
+        descriptors: opts[:descriptors]
+      })
 
     pmt = %PMT{
       pmt

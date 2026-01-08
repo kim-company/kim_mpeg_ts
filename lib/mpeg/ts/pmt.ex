@@ -10,7 +10,8 @@ defmodule MPEG.TS.PMT do
 
   @type stream_t :: %{
           stream_type: atom,
-          stream_type_id: stream_type_id_t
+          stream_type_id: stream_type_id_t,
+          descriptors: list()
         }
 
   @type streams_t :: %{
@@ -59,17 +60,17 @@ defmodule MPEG.TS.PMT do
 
   defp parse_program_info(program_info_length, data) do
     <<program_descriptors::binary-size(program_info_length), rest::binary>> = data
-    {:ok, {parse_program_descriptors(program_descriptors, []), rest}}
+    {:ok, {parse_descriptors(program_descriptors, []), rest}}
   end
 
-  defp parse_program_descriptors(<<>>, acc), do: Enum.reverse(acc)
+  defp parse_descriptors(<<>>, acc), do: Enum.reverse(acc)
 
-  defp parse_program_descriptors(
+  defp parse_descriptors(
          <<tag::8, length::8, data::binary-size(length), rest::binary>>,
          acc
        ) do
     descriptor = %{tag: tag, data: data}
-    parse_program_descriptors(rest, [descriptor | acc])
+    parse_descriptors(rest, [descriptor | acc])
   end
 
   defp parse_streams(data, acc \\ %{})
@@ -83,14 +84,15 @@ defmodule MPEG.TS.PMT do
            elementary_pid::13,
            _reserved1::4,
            program_info_length::12,
-           _program_info::binary-size(program_info_length),
+           program_info::binary-size(program_info_length),
            rest::binary
          >>,
          acc
        ) do
     stream = %{
       stream_type_id: stream_type_id,
-      stream_type: parse_stream_type(stream_type_id)
+      stream_type: parse_stream_type(stream_type_id),
+      descriptors: parse_descriptors(program_info, [])
     }
 
     result = Map.put(acc, elementary_pid, stream)
@@ -255,6 +257,8 @@ defmodule MPEG.TS.PMT do
     :METADATA_IN_DATA_CAROUSEL,
     :METADATA_IN_OBJECT_CAROUSEL,
     :METADATA_IN_SYNC_DOWNLOAD,
+    :SCTE_35_SPLICE,
+    :SCTE_35_RESERVED,
     :IPMP
   ]
 
@@ -267,6 +271,29 @@ defmodule MPEG.TS.PMT do
   def pes_stream_type?(stream_type) when stream_type in @non_pes_stream_types, do: false
 
   def pes_stream_type?(_stream_type), do: true
+
+  @doc """
+  Returns true for streams that carry PES packets, using descriptors when needed.
+  """
+  @spec pes_stream?(stream_t()) :: boolean()
+  def pes_stream?(%{stream_type: stream_type} = stream) do
+    case stream_type do
+      :PES_PRIVATE_DATA ->
+        # DVB subtitles/teletext still use PES (descriptor tags 0x59/0x56).
+        true
+
+      other ->
+        pes_stream_type?(other) and not has_non_pes_descriptor?(stream)
+    end
+  end
+
+  defp has_non_pes_descriptor?(%{descriptors: descriptors}) do
+    Enum.any?(descriptors, fn
+      # Metadata section (per ISO/IEC 13818-1 Table 2-45).
+      %{tag: 0x2D} -> true
+      _ -> false
+    end)
+  end
 
   @doc """
   Categorizes a stream type as :video, :audio, or :other.
@@ -472,7 +499,13 @@ defmodule MPEG.TS.PMT do
     def marshal(pmt) do
       streams =
         Enum.map_join(pmt.streams, fn {pid, stream} ->
-          <<stream.stream_type_id::8, 0b111::3, pid::13, 0b1111::4, 0::12>>
+          descriptors =
+            Enum.map_join(Map.get(stream, :descriptors, []), fn %{tag: tag, data: data} ->
+              <<tag::8, byte_size(data)::8>> <> data
+            end)
+
+          <<stream.stream_type_id::8, 0b111::3, pid::13, 0b1111::4, byte_size(descriptors)::12>> <>
+            descriptors
         end)
 
       descriptors =

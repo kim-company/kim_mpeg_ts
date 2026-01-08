@@ -36,8 +36,26 @@ defmodule MPEG.TS.MuxerTest do
                 pcr_pid: 0x100,
                 program_info: [],
                 streams: %{
-                  0x100 => %{stream_type: :H264_AVC, stream_type_id: 27},
-                  0x101 => %{stream_type: :AAC_ADTS, stream_type_id: 15}
+                  0x100 => %{stream_type: :H264_AVC, stream_type_id: 27, descriptors: []},
+                  0x101 => %{stream_type: :AAC_ADTS, stream_type_id: 15, descriptors: []}
+                }
+              }
+            }} = PSI.unmarshal(raw_psi, true)
+  end
+
+  test "Mux PMT table with descriptors", %{muxer: muxer} do
+    descriptors = [%{tag: 0x59, data: <<0xAA>>}]
+
+    {pid, muxer} =
+      Muxer.add_elementary_stream(muxer, :PES_PRIVATE_DATA, descriptors: descriptors)
+
+    {%Packet{pid: 0x1000, pusi: true, payload: raw_psi}, _muxer} = Muxer.mux_pmt(muxer)
+
+    assert {:ok,
+            %PSI{
+              table: %PMT{
+                streams: %{
+                  ^pid => %{stream_type: :PES_PRIVATE_DATA, descriptors: ^descriptors}
                 }
               }
             }} = PSI.unmarshal(raw_psi, true)
@@ -93,7 +111,7 @@ defmodule MPEG.TS.MuxerTest do
     assert muxer.pmt == %MPEG.TS.PMT{
              pcr_pid: nil,
              program_info: [%{data: "CUEI", tag: 5}],
-             streams: %{500 => %{stream_type: :SCTE_35_SPLICE, stream_type_id: 134}}
+          streams: %{500 => %{stream_type: :SCTE_35_SPLICE, stream_type_id: 134, descriptors: []}}
            }
 
     assert packet.payload != ""
@@ -137,10 +155,10 @@ defmodule MPEG.TS.MuxerTest do
     assert %PMT{
              pcr_pid: ^video_pid,
              program_info: [],
-             streams: %{
-               ^video_pid => %{stream_type: :H264_AVC, stream_type_id: 27},
-               ^audio_pid => %{stream_type: :AAC_ADTS, stream_type_id: 15}
-             }
+            streams: %{
+              ^video_pid => %{stream_type: :H264_AVC, stream_type_id: 27, descriptors: []},
+              ^audio_pid => %{stream_type: :AAC_ADTS, stream_type_id: 15, descriptors: []}
+            }
            } = pmt.table
 
     assert [video_sample1, video_sample2] = Demuxer.filter(units, video_pid)
@@ -157,6 +175,29 @@ defmodule MPEG.TS.MuxerTest do
       assert sample.pts == sample.dts
       assert sample.stream_id == 0xC0
     end
+  end
+
+  test "Mux and demux PES private data JSON", %{muxer: muxer} do
+    descriptors = [%{tag: 0x05, data: "JSON"}]
+    {pid, muxer} = Muxer.add_elementary_stream(muxer, :PES_PRIVATE_DATA, descriptors: descriptors)
+    {pat, muxer} = Muxer.mux_pat(muxer)
+    {pmt, muxer} = Muxer.mux_pmt(muxer)
+
+    json_payload = ~s({"type":"json","value":1})
+    {packets, _muxer} = Muxer.mux_sample(muxer, pid, json_payload, 0, sync?: true)
+
+    data = Marshaler.marshal([pat, pmt | packets])
+
+    units =
+      data
+      |> Stream.map(&IO.iodata_to_binary/1)
+      |> Demuxer.stream!(strict?: true)
+      |> Enum.into([])
+
+    assert %MPEG.TS.PSI{table: %PMT{streams: %{^pid => %{descriptors: ^descriptors}}}} =
+             units |> Demuxer.filter(0x1000) |> List.first()
+
+    assert %PES{data: ^json_payload} = Demuxer.filter(units, pid) |> List.first()
   end
 
   @tag :tmp_dir
