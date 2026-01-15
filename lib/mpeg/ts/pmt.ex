@@ -221,7 +221,9 @@ defmodule MPEG.TS.PMT do
 
     # --- Newer video codecs ---
     # H.266 / VVC in MPEG-TS
-    0x33 => :VVC
+    0x33 => :VVC,
+    # lightweight low-latency lossless quality video coding.
+    0x32 => :JPEGXS
     # (Other 0xD1.. entries like Dirac/AVS are vendor/region-specific and left out unless you need them)
   }
 
@@ -339,6 +341,7 @@ defmodule MPEG.TS.PMT do
              :HEVC_TIMING_HRD,
              :HEVC_SUB_PARTITION_BASE,
              :HEVC_SUB_PARTITION_ENH,
+             :JPEGXS,
              :VVC,
              :VVC_TEMPORAL_SCALABLE,
              :VVC_TEMPORAL_SCALABLE_SUB_BITSTREAM
