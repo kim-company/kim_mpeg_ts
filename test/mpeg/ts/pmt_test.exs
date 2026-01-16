@@ -72,5 +72,15 @@ defmodule MPEG.TS.PMTTest do
       assert stream.descriptors == [%{tag: 0x59, data: <<0xAA>>}]
       assert PMT.pes_stream?(stream)
     end
+
+    test "reclassifies Opus in PES private data via registration descriptor" do
+      pmt =
+        <<0xE1, 0x00, 0xF0, 0x00, 0x06, 0xE1, 0x01, 0xF0, 0x06, 0x05, 0x04, "Opus">>
+
+      assert {:ok, %PMT{streams: %{257 => stream}}} = PMT.unmarshal(pmt, true)
+      assert stream.descriptors == [%{tag: 0x05, data: "Opus"}]
+      assert stream.stream_type == :OPUS
+      assert PMT.pes_stream?(stream)
+    end
   end
 end
