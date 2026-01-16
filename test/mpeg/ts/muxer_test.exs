@@ -200,6 +200,24 @@ defmodule MPEG.TS.MuxerTest do
     assert %PES{data: ^json_payload} = Demuxer.filter(units, pid) |> List.first()
   end
 
+  test "Mux PMT table for Opus adds registration descriptor", %{muxer: muxer} do
+    {pid, muxer} = Muxer.add_elementary_stream(muxer, :OPUS)
+    {pmt, _muxer} = Muxer.mux_pmt(muxer)
+
+    assert {:ok,
+            %MPEG.TS.PSI{
+              table: %PMT{
+                streams: %{
+                  ^pid => %{
+                    stream_type: :OPUS,
+                    stream_type_id: 0x06,
+                    descriptors: [%{tag: 0x05, data: "Opus"}]
+                  }
+                }
+              }
+            }} = MPEG.TS.PSI.unmarshal(pmt.payload, pmt.pusi)
+  end
+
   @tag :tmp_dir
   test "muxer correctly handles timestamp rollover conversion", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, "rollover_muxed.ts")

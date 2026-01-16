@@ -262,6 +262,7 @@ defmodule MPEG.TS.PMT do
   end
 
   @spec encode_stream_type(atom()) :: stream_id_t()
+  def encode_stream_type(:OPUS), do: Map.fetch!(@atom_to_stream_id, :PES_PRIVATE_DATA)
   def encode_stream_type(val), do: Map.fetch!(@atom_to_stream_id, val)
 
   @non_pes_stream_types [
