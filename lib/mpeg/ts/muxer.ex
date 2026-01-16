@@ -52,8 +52,6 @@ defmodule MPEG.TS.Muxer do
         pid: @start_pid + map_size(pmt.streams)
       )
 
-    opts = maybe_add_opus_registration(stream_type, opts)
-
     pid = opts[:pid]
 
     if Map.has_key?(pmt.streams, pid) do
@@ -100,21 +98,6 @@ defmodule MPEG.TS.Muxer do
 
     {pid, muxer}
   end
-
-  defp maybe_add_opus_registration(:OPUS, opts) do
-    descriptors = opts[:descriptors]
-
-    if Enum.any?(descriptors, fn
-         %{tag: 0x05, data: "Opus"} -> true
-         _ -> false
-       end) do
-      opts
-    else
-      Keyword.put(opts, :descriptors, [%{tag: 0x05, data: "Opus"} | descriptors])
-    end
-  end
-
-  defp maybe_add_opus_registration(_stream_type, opts), do: opts
 
   @doc """
   Mux the PAT table into a packet.

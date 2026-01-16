@@ -91,7 +91,6 @@ defmodule MPEG.TS.PMT do
        ) do
     descriptors = parse_descriptors(program_info, [])
     stream_type = parse_stream_type(stream_type_id)
-    stream_type = maybe_override_stream_type(stream_type, descriptors)
 
     stream = %{
       stream_type_id: stream_type_id,
@@ -105,23 +104,6 @@ defmodule MPEG.TS.PMT do
 
   defp parse_streams(_, _) do
     {:error, :invalid_data}
-  end
-
-  defp maybe_override_stream_type(:PES_PRIVATE_DATA, descriptors) do
-    if registration_descriptor?(descriptors, "Opus") do
-      :OPUS
-    else
-      :PES_PRIVATE_DATA
-    end
-  end
-
-  defp maybe_override_stream_type(other, _descriptors), do: other
-
-  defp registration_descriptor?(descriptors, format_identifier) do
-    Enum.any?(descriptors, fn
-      %{tag: 0x05, data: ^format_identifier} -> true
-      _ -> false
-    end)
   end
 
   @stream_id_to_atom %{
@@ -262,7 +244,6 @@ defmodule MPEG.TS.PMT do
   end
 
   @spec encode_stream_type(atom()) :: stream_id_t()
-  def encode_stream_type(:OPUS), do: Map.fetch!(@atom_to_stream_id, :PES_PRIVATE_DATA)
   def encode_stream_type(val), do: Map.fetch!(@atom_to_stream_id, val)
 
   @non_pes_stream_types [
@@ -380,7 +361,6 @@ defmodule MPEG.TS.PMT do
              :AAC_ADTS,
              :MPEG4_AUDIO,
              :MPEG4_AUDIO_LATM,
-             :OPUS,
              :BLURAY_PCM_AUDIO,
              :BD_PCM_AUDIO,
              :AC3_AUDIO,

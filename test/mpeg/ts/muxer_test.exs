@@ -200,8 +200,10 @@ defmodule MPEG.TS.MuxerTest do
     assert %PES{data: ^json_payload} = Demuxer.filter(units, pid) |> List.first()
   end
 
-  test "Mux PMT table for Opus adds registration descriptor", %{muxer: muxer} do
-    {pid, muxer} = Muxer.add_elementary_stream(muxer, :OPUS)
+  test "Mux PMT table for Opus registration descriptor uses PES private data", %{muxer: muxer} do
+    {pid, muxer} =
+      Muxer.add_elementary_stream(muxer, :PES_PRIVATE_DATA, descriptors: [%{tag: 0x05, data: "Opus"}])
+
     {pmt, _muxer} = Muxer.mux_pmt(muxer)
 
     assert {:ok,
@@ -209,7 +211,7 @@ defmodule MPEG.TS.MuxerTest do
               table: %PMT{
                 streams: %{
                   ^pid => %{
-                    stream_type: :OPUS,
+                    stream_type: :PES_PRIVATE_DATA,
                     stream_type_id: 0x06,
                     descriptors: [%{tag: 0x05, data: "Opus"}]
                   }
