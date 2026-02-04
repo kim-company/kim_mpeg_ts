@@ -54,6 +54,33 @@ defmodule MPEG.TS.DemuxerTest do
     assert count > 0
   end
 
+  test "drops packets until PAT and PMT are available" do
+    muxer = MPEG.TS.Muxer.new()
+    {pid, muxer} = MPEG.TS.Muxer.add_elementary_stream(muxer, :H264_AVC, pid: 0x100)
+    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
+    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
+
+    pre_payload = :binary.copy(<<1>>, 200)
+    post_payload = :binary.copy(<<2>>, 200)
+
+    {pre_packets, muxer} = MPEG.TS.Muxer.mux_sample(muxer, pid, pre_payload, 0, sync?: true)
+    {post_packets, _muxer} = MPEG.TS.Muxer.mux_sample(muxer, pid, post_payload, 9_000, sync?: true)
+
+    packets = [hd(pre_packets), pat, pmt] ++ post_packets
+
+    units =
+      packets
+      |> MPEG.TS.Marshaler.marshal()
+      |> Stream.map(&IO.iodata_to_binary/1)
+      |> Demuxer.stream!(strict?: true)
+      |> Enum.into([])
+
+    pes = Demuxer.filter(units, pid)
+
+    assert length(pes) == 1
+    assert %MPEG.TS.PES{data: ^post_payload} = List.first(pes)
+  end
+
   test "works with partial data" do
     one_shot = demux_file!(@avsync)
 

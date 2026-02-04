@@ -154,6 +154,21 @@ defmodule MPEG.TS.Demuxer do
     demux_packets(state, pkts, acc)
   end
 
+  # Drop all packets until PAT arrives.
+  defp demux_packets(state, [pkt | pkts], acc)
+       when map_size(state.pids_with_pmt) == 0 and pkt.pid_class != :pat do
+    Logger.debug(fn -> "Dropping PID #{pkt.pid} packet until PAT is available" end)
+    demux_packets(state, pkts, acc)
+  end
+
+  # Drop all packets until PMT is parsed (except PAT and PMT PIDs).
+  defp demux_packets(state, [pkt | pkts], acc)
+       when map_size(state.streams) == 0 and
+              not (pkt.pid_class == :pat or is_map_key(state.pids_with_pmt, pkt.pid)) do
+    Logger.debug(fn -> "Dropping PID #{pkt.pid} packet until PMT is available" end)
+    demux_packets(state, pkts, acc)
+  end
+
   defp demux_packets(state, [pkt | pkts], acc)
        when is_map_key(state.stream_aggregators, pkt.pid) do
     # This is a PES packet.
@@ -195,7 +210,7 @@ defmodule MPEG.TS.Demuxer do
         end
 
       best_effort_t = state.last_dts
-      pid_rollover = Map.get(state.rollover, pkt.pid, %{pts: %{}})
+      pid_rollover = Map.get(state.rollover, pkt.pid, %{pts: %{}, dts: %{}})
 
       {corrected_dts, updated_dts} = correct_timestamp(pkt.pid, best_effort_t, pid_rollover.pts)
 
@@ -205,7 +220,11 @@ defmodule MPEG.TS.Demuxer do
         t: corrected_dts
       }
 
-      state = put_in(state, [Access.key!(:rollover), pkt.pid], %{pts: updated_dts})
+      state =
+        put_in(state, [Access.key!(:rollover), pkt.pid], %{
+          pts: updated_dts,
+          dts: Map.get(pid_rollover, :dts, %{})
+        })
 
       demux_packets(state, pkts, [container | acc])
     else
@@ -304,8 +323,11 @@ defmodule MPEG.TS.Demuxer do
     Enum.map_reduce(pes, state, fn x, acc_state ->
       curr_rollover = Map.get(acc_state.rollover, pid, %{pts: %{}, dts: %{}})
 
-      {corrected_pts, updated_pts} = correct_timestamp(pid, x.pts, curr_rollover.pts)
-      {corrected_dts, updated_dts} = correct_timestamp(pid, x.dts, curr_rollover.dts)
+      {corrected_pts, updated_pts} =
+        correct_timestamp(pid, x.pts, Map.get(curr_rollover, :pts, %{}))
+
+      {corrected_dts, updated_dts} =
+        correct_timestamp(pid, x.dts, Map.get(curr_rollover, :dts, %{}))
 
       corrected_x = %{x | pts: corrected_pts, dts: corrected_dts}
 
