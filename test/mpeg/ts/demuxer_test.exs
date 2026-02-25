@@ -113,6 +113,61 @@ defmodule MPEG.TS.DemuxerTest do
     assert %MPEG.TS.PES{data: ^post_payload} = List.first(pes)
   end
 
+  test "in non-strict mode, drops incomplete PES and keeps next one" do
+    muxer = MPEG.TS.Muxer.new()
+    {pid, muxer} = MPEG.TS.Muxer.add_elementary_stream(muxer, :H264_AVC, pid: 0x100)
+    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
+    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
+
+    pre_payload = :binary.copy(<<1>>, 800)
+    post_payload = :binary.copy(<<2>>, 800)
+
+    {pre_packets, muxer} = MPEG.TS.Muxer.mux_sample(muxer, pid, pre_payload, 0, sync?: true)
+
+    {post_packets, _muxer} =
+      MPEG.TS.Muxer.mux_sample(muxer, pid, post_payload, 9_000, sync?: true)
+
+    # Corrupt the first PES by dropping one continuation packet in the middle.
+    packets = [pat, pmt] ++ List.delete_at(pre_packets, 2) ++ post_packets
+
+    units =
+      packets
+      |> MPEG.TS.Marshaler.marshal()
+      |> Stream.map(&IO.iodata_to_binary/1)
+      |> Demuxer.stream!(strict?: false, wait_rai?: false)
+      |> Enum.into([])
+
+    pes = Demuxer.filter(units, pid)
+
+    assert length(pes) == 1
+    assert %MPEG.TS.PES{data: ^post_payload} = List.first(pes)
+  end
+
+  test "in strict mode, raises on incomplete PES" do
+    muxer = MPEG.TS.Muxer.new()
+    {pid, muxer} = MPEG.TS.Muxer.add_elementary_stream(muxer, :H264_AVC, pid: 0x100)
+    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
+    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
+
+    pre_payload = :binary.copy(<<1>>, 800)
+    post_payload = :binary.copy(<<2>>, 800)
+
+    {pre_packets, muxer} = MPEG.TS.Muxer.mux_sample(muxer, pid, pre_payload, 0, sync?: true)
+
+    {post_packets, _muxer} =
+      MPEG.TS.Muxer.mux_sample(muxer, pid, post_payload, 9_000, sync?: true)
+
+    packets = [pat, pmt] ++ List.delete_at(pre_packets, 2) ++ post_packets
+
+    assert_raise MPEG.TS.StreamAggregator.Error, fn ->
+      packets
+      |> MPEG.TS.Marshaler.marshal()
+      |> Stream.map(&IO.iodata_to_binary/1)
+      |> Demuxer.stream!(strict?: true, wait_rai?: false)
+      |> Enum.into([])
+    end
+  end
+
   test "works with partial data" do
     one_shot = demux_file!(@avsync)
 

@@ -180,7 +180,7 @@ defmodule MPEG.TS.Demuxer do
           e in StreamAggregator.Error ->
             unless state.strict? do
               Logger.warning("PID #{pkt.pid} error: #{e.message}")
-              {[], StreamAggregator.new(wait_rai?: state.wait_rai?)}
+              {[], StreamAggregator.new(wait_rai?: state.wait_rai?, strict?: state.strict?)}
             else
               reraise e, __STACKTRACE__
             end
@@ -264,7 +264,7 @@ defmodule MPEG.TS.Demuxer do
       |> Enum.filter(fn {_pid, stream} -> PMT.pes_stream?(stream) end)
       |> Enum.reduce(state, fn {pid, _stream}, state ->
         update_in(state, [Access.key!(:stream_aggregators), pid], fn
-          nil -> StreamAggregator.new(wait_rai?: state.wait_rai?)
+          nil -> StreamAggregator.new(wait_rai?: state.wait_rai?, strict?: state.strict?)
           queue -> queue
         end)
       end)
@@ -312,7 +312,7 @@ defmodule MPEG.TS.Demuxer do
       e in StreamAggregator.Error ->
         unless strict? do
           Logger.warning("PID #{pid} error: #{e.message}")
-          {[], StreamAggregator.new(wait_rai?: state.wait_rai?)}
+          {[], StreamAggregator.new(wait_rai?: state.wait_rai?, strict?: state.strict?)}
         else
           reraise e, __STACKTRACE__
         end
