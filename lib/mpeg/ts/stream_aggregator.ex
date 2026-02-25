@@ -40,19 +40,29 @@ defmodule MPEG.TS.StreamAggregator do
   end
 
   def put_and_get(state, pkt) do
-    ppes = unmarshal_partial_pes!(pkt)
+    cond do
+      :queue.is_empty(state.acc) and not pkt.pusi ->
+        # If we start mid-PES (or after an aggregator reset), packets may begin
+        # with continuations that do not carry a PES header (`pusi: false`).
+        # Those packets cannot be depayloaded on their own, so we ignore them
+        # until the next PES start arrives.
+        {[], state}
 
-    if pkt.pusi and not :queue.is_empty(state.acc) do
-      get_and_update_in(state, [Access.key!(:acc)], fn acc ->
-        pes =
-          acc
-          |> :queue.to_list()
-          |> depayload()
+      true ->
+        ppes = unmarshal_partial_pes!(pkt)
 
-        {pes, :queue.from_list([ppes])}
-      end)
-    else
-      {[], update_in(state, [Access.key!(:acc)], fn q -> :queue.in(ppes, q) end)}
+        if pkt.pusi and not :queue.is_empty(state.acc) do
+          get_and_update_in(state, [Access.key!(:acc)], fn acc ->
+            pes =
+              acc
+              |> :queue.to_list()
+              |> depayload()
+
+            {pes, :queue.from_list([ppes])}
+          end)
+        else
+          {[], update_in(state, [Access.key!(:acc)], fn q -> :queue.in(ppes, q) end)}
+        end
     end
   end
 
