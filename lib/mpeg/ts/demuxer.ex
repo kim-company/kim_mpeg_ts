@@ -195,7 +195,7 @@ defmodule MPEG.TS.Demuxer do
   end
 
   defp demux_packets(state, [pkt | pkts], acc)
-       when pkt.pid_class in [:psi, :pat] or is_map_key(state.pids_with_pmt, pkt.pid) do
+       when pkt.pid_class == :pat or is_map_key(state.pids_with_pmt, pkt.pid) do
     with {:ok, psi} <- PSI.unmarshal(pkt.payload, pkt.pusi) do
       state =
         cond do
@@ -242,7 +242,9 @@ defmodule MPEG.TS.Demuxer do
   defp demux_packets(state, [pkt | pkts], acc) do
     # This packet does not belong to any PES stream we know -- it might be
     # an unknown stream (we did not receive PMTs yet) or a PSI stream.
-    Logger.warning("Unexpected packet received: #{inspect(pkt)}")
+    # Streams routinely carry PIDs the consumer does not subscribe to, so
+    # drop quietly to avoid log floods.
+    Logger.debug(fn -> "Dropping unexpected packet: #{inspect(pkt)}" end)
     demux_packets(state, pkts, acc)
   end
 

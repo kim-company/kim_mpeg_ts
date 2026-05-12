@@ -1,6 +1,7 @@
 defmodule MPEG.TS.DemuxerTest do
   use ExUnit.Case
 
+  import ExUnit.CaptureLog
   alias MPEG.TS.Demuxer
 
   @broken "test/data/broken.ts"
@@ -226,6 +227,49 @@ defmodule MPEG.TS.DemuxerTest do
     {units1, demuxer} = Demuxer.demux(demuxer, valid)
     {units2, _demuxer} = Demuxer.flush(demuxer)
     units = units1 ++ units2
+    assert Enum.any?(units, &match?(%{payload: %MPEG.TS.PES{data: ^payload}}, &1))
+  end
+
+  test "ignores undeclared :psi-classified PIDs without warning per packet" do
+    # Regression: PIDs in 0x0020..0x1FFA are classified as :psi by Packet,
+    # but only PIDs the PAT lists as PMT-carrying actually carry PSI. The
+    # demuxer used to attempt PSI parsing for any :psi-classified PID and
+    # log a warning per packet when the header didn't unmarshal. Streams
+    # carrying an undeclared PID (e.g. video the consumer doesn't care
+    # about) would flood the log. These packets should be dropped quietly.
+    muxer = MPEG.TS.Muxer.new()
+    {audio_pid, muxer} = MPEG.TS.Muxer.add_elementary_stream(muxer, :AAC_ADTS, pid: 0x201)
+    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
+    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
+    payload = :binary.copy(<<0x42>>, 800)
+    {audio_packets, _muxer} = MPEG.TS.Muxer.mux_sample(muxer, audio_pid, payload, 0, sync?: true)
+
+    undeclared =
+      Enum.map(0..7, fn cc ->
+        MPEG.TS.Packet.new(:binary.copy(<<0xCC>>, 184),
+          pid: 0x101,
+          pid_class: :psi,
+          pusi: true,
+          continuity_counter: cc
+        )
+      end)
+
+    binary =
+      ([pat, pmt] ++ undeclared ++ audio_packets)
+      |> MPEG.TS.Marshaler.marshal()
+      |> Enum.map(&IO.iodata_to_binary/1)
+      |> Enum.join()
+
+    {{units, _}, log} =
+      with_log(fn ->
+        demuxer = Demuxer.new(wait_rai?: false)
+        {u1, demuxer} = Demuxer.demux(demuxer, binary)
+        {u2, demuxer} = Demuxer.flush(demuxer)
+        {u1 ++ u2, demuxer}
+      end)
+
+    refute log =~ "PID 257"
+    refute log =~ "Unexpected packet"
     assert Enum.any?(units, &match?(%{payload: %MPEG.TS.PES{data: ^payload}}, &1))
   end
 
