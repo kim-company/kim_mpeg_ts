@@ -24,3 +24,4 @@ kim_mpeg_ts-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+.dexter*
