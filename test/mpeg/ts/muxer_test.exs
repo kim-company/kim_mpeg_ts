@@ -111,7 +111,9 @@ defmodule MPEG.TS.MuxerTest do
     assert muxer.pmt == %MPEG.TS.PMT{
              pcr_pid: nil,
              program_info: [%{data: "CUEI", tag: 5}],
-          streams: %{500 => %{stream_type: :SCTE_35_SPLICE, stream_type_id: 134, descriptors: []}}
+             streams: %{
+               500 => %{stream_type: :SCTE_35_SPLICE, stream_type_id: 134, descriptors: []}
+             }
            }
 
     assert packet.payload != ""
@@ -155,10 +157,10 @@ defmodule MPEG.TS.MuxerTest do
     assert %PMT{
              pcr_pid: ^video_pid,
              program_info: [],
-            streams: %{
-              ^video_pid => %{stream_type: :H264_AVC, stream_type_id: 27, descriptors: []},
-              ^audio_pid => %{stream_type: :AAC_ADTS, stream_type_id: 15, descriptors: []}
-            }
+             streams: %{
+               ^video_pid => %{stream_type: :H264_AVC, stream_type_id: 27, descriptors: []},
+               ^audio_pid => %{stream_type: :AAC_ADTS, stream_type_id: 15, descriptors: []}
+             }
            } = pmt.table
 
     assert [video_sample1, video_sample2] = Demuxer.filter(units, video_pid)
@@ -202,7 +204,9 @@ defmodule MPEG.TS.MuxerTest do
 
   test "Mux PMT table for Opus registration descriptor uses PES private data", %{muxer: muxer} do
     {pid, muxer} =
-      Muxer.add_elementary_stream(muxer, :PES_PRIVATE_DATA, descriptors: [%{tag: 0x05, data: "Opus"}])
+      Muxer.add_elementary_stream(muxer, :PES_PRIVATE_DATA,
+        descriptors: [%{tag: 0x05, data: "Opus"}]
+      )
 
     {pmt, _muxer} = Muxer.mux_pmt(muxer)
 
