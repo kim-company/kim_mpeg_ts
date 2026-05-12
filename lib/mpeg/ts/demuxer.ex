@@ -118,7 +118,8 @@ defmodule MPEG.TS.Demuxer do
           e in Error ->
             unless state.strict? do
               Logger.warning("Parse error: #{inspect(e.message)}")
-              {[], state}
+              # Drop the misaligned buffer; the next feed gets a fresh start.
+              {[], <<>>}
             else
               reraise e, __STACKTRACE__
             end

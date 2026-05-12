@@ -196,6 +196,39 @@ defmodule MPEG.TS.DemuxerTest do
     end
   end
 
+  test "non-strict demux recovers when a parse error happens on the first feed" do
+    # Regression: in non-strict mode, when parse_packets raises (e.g. the
+    # stream attaches mid-packet so the first 188-byte chunk is not
+    # 0x47-aligned), the rescue branch used to stash the whole demuxer
+    # struct into :pending. The next feed then did `pending <> data`,
+    # crashing with an ArgumentError during binary construction.
+    muxer = MPEG.TS.Muxer.new()
+    {pid, muxer} = MPEG.TS.Muxer.add_elementary_stream(muxer, :H264_AVC, pid: 0x100)
+    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
+    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
+    payload = :binary.copy(<<0xAB>>, 800)
+    {packets, _muxer} = MPEG.TS.Muxer.mux_sample(muxer, pid, payload, 0, sync?: true)
+
+    valid =
+      [pat, pmt | packets]
+      |> MPEG.TS.Marshaler.marshal()
+      |> Enum.map(&IO.iodata_to_binary/1)
+      |> Enum.join()
+
+    # 188 non-sync bytes -> parse_many returns {:error, :invalid_data, _}
+    # -> parse_packets raises MPEG.TS.Demuxer.Error.
+    garbage = :binary.copy(<<0x00>>, 188)
+
+    demuxer = Demuxer.new(wait_rai?: false)
+    {[], demuxer} = Demuxer.demux(demuxer, garbage)
+    assert is_binary(demuxer.pending)
+
+    {units1, demuxer} = Demuxer.demux(demuxer, valid)
+    {units2, _demuxer} = Demuxer.flush(demuxer)
+    units = units1 ++ units2
+    assert Enum.any?(units, &match?(%{payload: %MPEG.TS.PES{data: ^payload}}, &1))
+  end
+
   test "correctly handles the mpegts rollover and converts it into monotonic pts/dts" do
     rollover_period_ns = round(2 ** 33 * (10 ** 9 / 90000))
 
