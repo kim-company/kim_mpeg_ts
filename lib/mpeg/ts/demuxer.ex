@@ -196,46 +196,29 @@ defmodule MPEG.TS.Demuxer do
 
   defp demux_packets(state, [pkt | pkts], acc)
        when pkt.pid_class == :pat or is_map_key(state.pids_with_pmt, pkt.pid) do
-    with {:ok, psi} <- PSI.unmarshal(pkt.payload, pkt.pusi) do
-      state =
-        cond do
-          is_map_key(state.pids_with_pmt, pkt.pid) and psi.table_type == :pmt ->
-            handle_pmt(psi.table, state)
+    demux_psi_packet(state, pkt, pkts, acc, fn psi, state ->
+      cond do
+        is_map_key(state.pids_with_pmt, pkt.pid) and psi.table_type == :pmt ->
+          handle_pmt(psi.table, state)
 
-          pkt.pid_class == :pat and psi.table_type == :pat ->
-            handle_pat(psi.table, state)
+        pkt.pid_class == :pat and psi.table_type == :pat ->
+          handle_pat(psi.table, state)
 
-          true ->
-            # We just forward the PSI packet as is.
-            state
-        end
+        true ->
+          # We just forward the PSI packet as is.
+          state
+      end
+    end)
+  end
 
-      best_effort_t = state.last_dts
-      pid_rollover = Map.get(state.rollover, pkt.pid, %{pts: %{}, dts: %{}})
+  defp demux_packets(state, [pkt | pkts], acc) when is_map_key(state.streams, pkt.pid) do
+    stream = Map.fetch!(state.streams, pkt.pid)
 
-      {corrected_dts, updated_dts} = correct_timestamp(pkt.pid, best_effort_t, pid_rollover.pts)
-
-      container = %Container{
-        pid: pkt.pid,
-        payload: psi,
-        t: corrected_dts
-      }
-
-      state =
-        put_in(state, [Access.key!(:rollover), pkt.pid], %{
-          pts: updated_dts,
-          dts: Map.get(pid_rollover, :dts, %{})
-        })
-
-      demux_packets(state, pkts, [container | acc])
+    if PMT.pes_stream?(stream) do
+      Logger.debug(fn -> "Dropping unexpected packet: #{inspect(pkt)}" end)
+      demux_packets(state, pkts, acc)
     else
-      {:error, reason} ->
-        if state.strict? do
-          raise Error, %{reason: reason, data: pkt.payload}
-        else
-          Logger.warning("PID #{pkt.pid}: error: #{inspect(reason)}")
-          demux_packets(state, pkts, acc)
-        end
+      demux_psi_packet(state, pkt, pkts, acc, fn _psi, state -> state end)
     end
   end
 
@@ -272,6 +255,38 @@ defmodule MPEG.TS.Demuxer do
         end)
       end)
     end)
+  end
+
+  defp demux_psi_packet(state, pkt, pkts, acc, update_state) do
+    with {:ok, psi} <- PSI.unmarshal(pkt.payload, pkt.pusi) do
+      state = update_state.(psi, state)
+      best_effort_t = state.last_dts
+      pid_rollover = Map.get(state.rollover, pkt.pid, %{pts: %{}, dts: %{}})
+
+      {corrected_dts, updated_dts} = correct_timestamp(pkt.pid, best_effort_t, pid_rollover.pts)
+
+      container = %Container{
+        pid: pkt.pid,
+        payload: psi,
+        t: corrected_dts
+      }
+
+      state =
+        put_in(state, [Access.key!(:rollover), pkt.pid], %{
+          pts: updated_dts,
+          dts: Map.get(pid_rollover, :dts, %{})
+        })
+
+      demux_packets(state, pkts, [container | acc])
+    else
+      {:error, reason} ->
+        if state.strict? do
+          raise Error, %{reason: reason, data: pkt.payload}
+        else
+          Logger.warning("PID #{pkt.pid}: error: #{inspect(reason)}")
+          demux_packets(state, pkts, acc)
+        end
+    end
   end
 
   defp parse_packets(buffer) do

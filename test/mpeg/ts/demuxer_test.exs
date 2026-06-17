@@ -169,6 +169,38 @@ defmodule MPEG.TS.DemuxerTest do
     end
   end
 
+  test "demuxes SCTE-35 non-PES elementary stream packets" do
+    muxer = MPEG.TS.Muxer.new()
+
+    {pid, muxer} =
+      MPEG.TS.Muxer.add_elementary_stream(muxer, :SCTE_35_SPLICE,
+        program_info: [%{tag: 0x05, data: "CUEI"}],
+        pid: 500
+      )
+
+    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
+    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
+
+    psi = %MPEG.TS.PSI{
+      header: %{
+        table_id: 0xFC,
+        section_syntax_indicator: false
+      },
+      table: Support.Factory.scte35()
+    }
+
+    {scte_packet, _muxer} = MPEG.TS.Muxer.mux_psi(muxer, pid, psi)
+
+    units =
+      [pat, pmt, scte_packet]
+      |> MPEG.TS.Marshaler.marshal()
+      |> Stream.map(&IO.iodata_to_binary/1)
+      |> Demuxer.stream!(strict?: true)
+      |> Enum.into([])
+
+    assert [%MPEG.TS.PSI{table_type: :scte35}] = Demuxer.filter(units, pid)
+  end
+
   test "works with partial data" do
     one_shot = demux_file!(@avsync)
 
