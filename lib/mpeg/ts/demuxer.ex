@@ -265,19 +265,23 @@ defmodule MPEG.TS.Demuxer do
 
       {corrected_dts, updated_dts} = correct_timestamp(pkt.pid, best_effort_t, pid_rollover.pts)
 
-      container = %Container{
-        pid: pkt.pid,
-        payload: psi,
-        t: corrected_dts
-      }
+      if emit_psi_packet?(pkt, state, corrected_dts) do
+        container = %Container{
+          pid: pkt.pid,
+          payload: psi,
+          t: corrected_dts
+        }
 
-      state =
-        put_in(state, [Access.key!(:rollover), pkt.pid], %{
-          pts: updated_dts,
-          dts: Map.get(pid_rollover, :dts, %{})
-        })
+        state =
+          put_in(state, [Access.key!(:rollover), pkt.pid], %{
+            pts: updated_dts,
+            dts: Map.get(pid_rollover, :dts, %{})
+          })
 
-      demux_packets(state, pkts, [container | acc])
+        demux_packets(state, pkts, [container | acc])
+      else
+        demux_packets(state, pkts, acc)
+      end
     else
       {:error, reason} ->
         if state.strict? do
@@ -287,6 +291,14 @@ defmodule MPEG.TS.Demuxer do
           demux_packets(state, pkts, acc)
         end
     end
+  end
+
+  defp emit_psi_packet?(pkt, state, t) do
+    control_psi_packet?(pkt, state) or not is_nil(t)
+  end
+
+  defp control_psi_packet?(pkt, state) do
+    pkt.pid_class == :pat or is_map_key(state.pids_with_pmt, pkt.pid)
   end
 
   defp parse_packets(buffer) do

@@ -25,6 +25,57 @@ defmodule MPEG.TS.DemuxerTest do
     |> Enum.into([])
   end
 
+  defp demux_with_scte_after_video_anchor(table) do
+    muxer = MPEG.TS.Muxer.new()
+    {video_pid, muxer} = MPEG.TS.Muxer.add_elementary_stream(muxer, :H264_AVC, pid: 0x100)
+
+    {scte_pid, muxer} =
+      MPEG.TS.Muxer.add_elementary_stream(muxer, :SCTE_35_SPLICE,
+        program_info: [%{tag: 0x05, data: "CUEI"}],
+        pid: 500
+      )
+
+    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
+    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
+
+    {video_packets, muxer} =
+      MPEG.TS.Muxer.mux_sample(
+        muxer,
+        video_pid,
+        :binary.copy(<<0x01>>, 800),
+        5_000_000_000,
+        sync?: true
+      )
+
+    {next_video_packets, muxer} =
+      MPEG.TS.Muxer.mux_sample(
+        muxer,
+        video_pid,
+        :binary.copy(<<0x02>>, 800),
+        6_000_000_000,
+        sync?: true
+      )
+
+    psi = %MPEG.TS.PSI{
+      header: %{
+        table_id: 0xFC,
+        section_syntax_indicator: false
+      },
+      table: table
+    }
+
+    {scte_packet, _muxer} = MPEG.TS.Muxer.mux_psi(muxer, scte_pid, psi)
+
+    units =
+      ([pat, pmt] ++ video_packets ++ next_video_packets ++ [scte_packet])
+      |> MPEG.TS.Marshaler.marshal()
+      |> Stream.map(&IO.iodata_to_binary/1)
+      |> Demuxer.stream!(strict?: true)
+      |> Enum.into([])
+
+    {units, scte_pid}
+  end
+
   test "finds PMT table" do
     units = demux_file!(@avsync)
 
@@ -170,41 +221,23 @@ defmodule MPEG.TS.DemuxerTest do
   end
 
   test "demuxes SCTE-35 non-PES elementary stream packets" do
-    muxer = MPEG.TS.Muxer.new()
-
-    {pid, muxer} =
-      MPEG.TS.Muxer.add_elementary_stream(muxer, :SCTE_35_SPLICE,
-        program_info: [%{tag: 0x05, data: "CUEI"}],
-        pid: 500
-      )
-
-    {pat, muxer} = MPEG.TS.Muxer.mux_pat(muxer)
-    {pmt, muxer} = MPEG.TS.Muxer.mux_pmt(muxer)
-
-    psi = %MPEG.TS.PSI{
-      header: %{
-        table_id: 0xFC,
-        section_syntax_indicator: false
-      },
-      table: Support.Factory.scte35()
-    }
-
-    {scte_packet, _muxer} = MPEG.TS.Muxer.mux_psi(muxer, pid, psi)
-
-    units =
-      [pat, pmt, scte_packet]
-      |> MPEG.TS.Marshaler.marshal()
-      |> Stream.map(&IO.iodata_to_binary/1)
-      |> Demuxer.stream!(strict?: true)
-      |> Enum.into([])
+    {units, pid} = demux_with_scte_after_video_anchor(Support.Factory.scte35())
 
     assert [%MPEG.TS.PSI{table_type: :scte35}] = Demuxer.filter(units, pid)
   end
 
   test "demuxes and re-marshals SCTE-35 splice-null packets" do
-    muxer = MPEG.TS.Muxer.new()
+    {units, pid} = demux_with_scte_after_video_anchor(Support.Factory.scte35_splice_null())
 
-    {pid, muxer} =
+    assert [demuxed_psi = %MPEG.TS.PSI{table_type: :scte35}] = Demuxer.filter(units, pid)
+    assert is_binary(MPEG.TS.Marshaler.marshal(demuxed_psi))
+  end
+
+  test "drops SCTE-35 packets until PES timing is anchored" do
+    muxer = MPEG.TS.Muxer.new()
+    {video_pid, muxer} = MPEG.TS.Muxer.add_elementary_stream(muxer, :H264_AVC, pid: 0x100)
+
+    {scte_pid, muxer} =
       MPEG.TS.Muxer.add_elementary_stream(muxer, :SCTE_35_SPLICE,
         program_info: [%{tag: 0x05, data: "CUEI"}],
         pid: 500
@@ -221,17 +254,41 @@ defmodule MPEG.TS.DemuxerTest do
       table: Support.Factory.scte35_splice_null()
     }
 
-    {scte_packet, _muxer} = MPEG.TS.Muxer.mux_psi(muxer, pid, psi)
+    {early_scte, muxer} = MPEG.TS.Muxer.mux_psi(muxer, scte_pid, psi)
+
+    {video_packets, muxer} =
+      MPEG.TS.Muxer.mux_sample(
+        muxer,
+        video_pid,
+        :binary.copy(<<0x01>>, 800),
+        5_000_000_000,
+        sync?: true
+      )
+
+    {next_video_packets, muxer} =
+      MPEG.TS.Muxer.mux_sample(
+        muxer,
+        video_pid,
+        :binary.copy(<<0x02>>, 800),
+        6_000_000_000,
+        sync?: true
+      )
+
+    {timed_scte, _muxer} = MPEG.TS.Muxer.mux_psi(muxer, scte_pid, psi)
 
     units =
-      [pat, pmt, scte_packet]
+      ([pat, pmt, early_scte] ++ video_packets ++ next_video_packets ++ [timed_scte])
       |> MPEG.TS.Marshaler.marshal()
       |> Stream.map(&IO.iodata_to_binary/1)
       |> Demuxer.stream!(strict?: true)
       |> Enum.into([])
 
-    assert [demuxed_psi = %MPEG.TS.PSI{table_type: :scte35}] = Demuxer.filter(units, pid)
-    assert is_binary(MPEG.TS.Marshaler.marshal(demuxed_psi))
+    scte_units = Enum.filter(units, &(&1.pid == scte_pid))
+
+    assert [%MPEG.TS.Demuxer.Container{payload: %MPEG.TS.PSI{table_type: :scte35}, t: t}] =
+             scte_units
+
+    assert is_integer(t)
   end
 
   test "works with partial data" do
