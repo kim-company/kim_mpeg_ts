@@ -59,7 +59,7 @@ defmodule MPEG.TS.PMT do
   defp parse_program_info(0, date), do: {:ok, {[], date}}
 
   defp parse_program_info(program_info_length, data) do
-    <<program_descriptors::binary-size(program_info_length), rest::binary>> = data
+    <<program_descriptors::binary-size(^program_info_length), rest::binary>> = data
     {:ok, {parse_descriptors(program_descriptors, []), rest}}
   end
 

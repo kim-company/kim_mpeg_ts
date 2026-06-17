@@ -96,6 +96,7 @@ defmodule MPEG.TS.StreamAggregator do
       |> Enum.join(<<>>)
 
     payload_size = byte_size(payload)
+    leader_length = leader.length
 
     payload =
       cond do
@@ -105,21 +106,21 @@ defmodule MPEG.TS.StreamAggregator do
             "PES group contains multiple stream_id: #{inspect(stream_ids)}"
           )
 
-        leader.length == 0 ->
+        leader_length == 0 ->
           # TODO: trim trailing stuffing bits? Seems to make no difference.
           payload
 
-        payload_size > leader.length ->
-          <<payload::binary-size(leader.length)-unit(8), _rest::binary>> = payload
+        payload_size > leader_length ->
+          <<payload::binary-size(^leader_length)-unit(8), _rest::binary>> = payload
           payload
 
-        payload_size == leader.length ->
+        payload_size == leader_length ->
           payload
 
         true ->
           maybe_raise_or_drop(
             strict?,
-            "Invalid PES, size mismatch (have=#{payload_size}, want=#{leader.length})"
+            "Invalid PES, size mismatch (have=#{payload_size}, want=#{leader_length})"
           )
       end
 

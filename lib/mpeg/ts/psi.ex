@@ -35,7 +35,7 @@ defmodule MPEG.TS.PSI do
       header_overhead = if header.section_syntax_indicator, do: @remaining_header_length, else: 0
       content_length = header.section_length - @crc_length - header_overhead
 
-      with <<raw_data::binary-size(content_length), crc::@crc_length-binary, _::binary>> <- data,
+      with <<raw_data::binary-size(^content_length), crc::@crc_length-binary, _::binary>> <- data,
            table_type = table_id_to_type(header.table_id) do
         case unmarshal_table(raw_data, table_type, is_start_unit) do
           {:ok, table} ->

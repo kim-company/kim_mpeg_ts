@@ -24,7 +24,7 @@ defmodule MPEG.TS.PMTTest do
     test "returns an error when map table is malformed" do
       valid_pmt = Factory.pmt()
       garbage_size = byte_size(valid_pmt) - 3
-      <<garbage::binary-size(garbage_size), _::binary>> = valid_pmt
+      <<garbage::binary-size(^garbage_size), _::binary>> = valid_pmt
       assert {:error, :invalid_data} = PMT.unmarshal(garbage, true)
     end
   end

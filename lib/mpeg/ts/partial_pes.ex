@@ -18,8 +18,6 @@ defmodule MPEG.TS.PartialPES do
         }
   defstruct [:data, :stream_id, :pts, :dts, :is_aligned, :discontinuity, :length]
 
-  require Logger
-
   @impl true
   def unmarshal(
         <<1::24, stream_id::8, packet_length::16, optional_fields::binary>>,
