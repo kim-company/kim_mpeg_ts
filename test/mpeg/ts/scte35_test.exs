@@ -32,6 +32,22 @@ defmodule MPEG.TS.SCTE35Test do
              } = scte35
     end
 
+    test "unmarshals valid SCTE-35 splice null command" do
+      {:ok, scte35} = SCTE35.unmarshal(Factory.scte35_splice_null(), true)
+
+      assert %SCTE35{
+               protocol_version: 0x0,
+               encrypted_packet: 0,
+               encryption_algorithm: 0x0,
+               pts_adjustment: 0,
+               cw_index: 0x0,
+               tier: 0xFFF,
+               splice_command_type: :splice_null,
+               splice_command: %SCTE35.SpliceNull{},
+               splice_descriptors: []
+             } = scte35
+    end
+
     test "returns error for malformed data" do
       malformed_data = <<0xFC, 0x80, 0x10, 0xFF, 0xFF>>
       assert {:error, _reason} = SCTE35.unmarshal(malformed_data, true)
@@ -65,6 +81,23 @@ defmodule MPEG.TS.SCTE35Test do
       }
 
       assert MPEG.TS.Marshaler.marshal(marker) == Factory.scte35()
+    end
+
+    test "marshal SCTE-35 splice null command" do
+      marker = %SCTE35{
+        protocol_version: 0x0,
+        encrypted_packet: 0,
+        encryption_algorithm: 0x0,
+        pts_adjustment: 0,
+        cw_index: 0x0,
+        tier: 0xFFF,
+        splice_command_type: :splice_null,
+        splice_command: %SCTE35.SpliceNull{},
+        splice_descriptors: [],
+        e_crc32: <<>>
+      }
+
+      assert MPEG.TS.Marshaler.marshal(marker) == Factory.scte35_splice_null()
     end
   end
 end

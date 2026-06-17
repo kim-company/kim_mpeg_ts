@@ -120,6 +120,20 @@ defmodule MPEG.TS.SCTE35 do
     end
   end
 
+  defmodule SpliceNull do
+    @behaviour MPEG.TS.Unmarshaler
+
+    defstruct []
+
+    @impl true
+    def unmarshal(<<>>, _start_unit), do: {:ok, %__MODULE__{}}
+    def unmarshal(_, _start_unit), do: {:error, :invalid_splice_null}
+
+    defimpl MPEG.TS.Marshaler do
+      def marshal(%MPEG.TS.SCTE35.SpliceNull{}), do: <<>>
+    end
+  end
+
   @type splice_command_type_t ::
           :splice_null
           | :splice_schedule
@@ -226,7 +240,7 @@ defmodule MPEG.TS.SCTE35 do
     end
   end
 
-  defp parse_splice_command(:splice_null, _data), do: {:ok, %{}}
+  defp parse_splice_command(:splice_null, data), do: SpliceNull.unmarshal(data, true)
   defp parse_splice_command(:splice_insert, data), do: SpliceInsert.unmarshal(data, true)
   defp parse_splice_command(_type, _data), do: {:error, :splice_command_not_implemented}
 
